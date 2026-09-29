@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Pending queue — PocketPay{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <h1>Pending queue</h1>
+    <button class="btn" id="process-btn">Process next pending transaction</button>
+  </div>
+  <p>Transactions waiting to be processed, in the order they were queued (first in, first out).</p>
+  <div id="banner"></div>
+
+  <div class="panel">
+    <table class="ledger">
+      <thead>
+        <tr>
+          <th>Position</th>
+          <th>Transaction ID</th>
+          <th>Description</th>
+          <th style="text-align:right;">Amount</th>
+        </tr>
+      </thead>
+      <tbody id="pending-body"></tbody>
+    </table>
+    <div id="pending-empty" class="empty-state" style="display:none;">
+      <h3>No pending transactions</h3>
+      <p>Everything in your queue has been processed.</p>
+    </div>
+  </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const banner = document.getElementById("banner");
+  function showBanner(kind, message) {
+    banner.innerHTML = `<div class="banner ${kind}">${message}</div>`;
+  }
+
+  async function loadPending() {
+    const items = await api.get("/api/pending");
+    const body = document.getElementById("pending-body");
+    const empty = document.getElementById("pending-empty");
+    body.innerHTML = "";
+    if (items.length === 0) {
+      empty.style.display = "block";
+      return;
+    }
+    empty.style.display = "none";
+    items.forEach((t, i) => {
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${i === 0 ? "Front of queue" : "#" + (i + 1)}</td>
+        <td class="mono">${t.transaction_id}</td>
+        <td>${t.description || t.type}</td>
+        <td class="amount out">${formatMoney(t.amount)}</td>
+      `;
+      body.appendChild(row);
+    });
+  }
+
+  document.getElementById("process-btn").addEventListener("click", async () => {
+    try {
+      const result = await api.post("/api/pending/process");
+      showBanner("success", `Processed ${result.transaction.transaction_id}.`);
+      await loadPending();
+    } catch (err) {
+      showBanner("error", err.message);
+    }
+  });
+
+  loadPending();
+</script>
+{% endblock %}

@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Contacts — PocketPay{% endblock %}
+{% block content %}
+  <div class="page-header"><h1>Contacts</h1></div>
+  <div id="banner"></div>
+
+  <div class="grid-2">
+    <div class="panel">
+      <h2>Add a contact</h2>
+      <form id="add-contact-form">
+        <div class="field">
+          <label for="identifier">User ID, wallet ID, phone, or exact name</label>
+          <input type="text" id="identifier" required />
+        </div>
+        <button class="btn" type="submit">Add contact</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>Search contacts</h2>
+      <div class="field">
+        <input type="text" id="contact-search" placeholder="Search saved contacts…" />
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Your contacts</h2>
+    <div id="contacts-list"></div>
+    <div id="contacts-empty" class="empty-state" style="display:none;">
+      <h3>No contacts yet</h3>
+      <p>Add a contact above to send money to them faster.</p>
+    </div>
+  </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const banner = document.getElementById("banner");
+  function showBanner(kind, message) {
+    banner.innerHTML = `<div class="banner ${kind}">${message}</div>`;
+    setTimeout(() => { banner.innerHTML = ""; }, 4000);
+  }
+
+  function renderContacts(contacts) {
+    const list = document.getElementById("contacts-list");
+    const empty = document.getElementById("contacts-empty");
+    list.innerHTML = "";
+    if (contacts.length === 0) {
+      empty.style.display = "block";
+      return;
+    }
+    empty.style.display = "none";
+    for (const c of contacts) {
+      const row = document.createElement("div");
+      row.className = "contact-row";
+      row.innerHTML = `
+        <div class="contact-info">
+          <div class="contact-avatar">${initials(c.name)}</div>
+          <div>
+            <div>${c.name}</div>
+            <div class="contact-meta">${c.wallet_id}</div>
+          </div>
+        </div>
+        <button class="btn secondary" data-id="${c.contact_id}" style="padding:6px 12px;">Remove</button>
+      `;
+      row.querySelector("button").addEventListener("click", async () => {
+        try {
+          await api.post("/api/contacts/remove", { contact_id: c.contact_id });
+          showBanner("success", `${c.name} removed from contacts.`);
+          loadContacts();
+        } catch (err) {
+          showBanner("error", err.message);
+        }
+      });
+      list.appendChild(row);
+    }
+  }
+
+  async function loadContacts() {
+    const contacts = await api.get("/api/contacts");
+    renderContacts(contacts);
+  }
+
+  document.getElementById("add-contact-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const identifier = document.getElementById("identifier").value.trim();
+    try {
+      await api.post("/api/contacts/add", { identifier });
+      showBanner("success", "Contact added.");
+      e.target.reset();
+      loadContacts();
+    } catch (err) {
+      showBanner("error", err.message);
+    }
+  });
+
+  let searchTimer;
+  document.getElementById("contact-search").addEventListener("input", (e) => {
+    clearTimeout(searchTimer);
+    const query = e.target.value.trim();
+    searchTimer = setTimeout(async () => {
+      if (!query) { loadContacts(); return; }
+      const contacts = await api.get(`/api/contacts/search?query=${encodeURIComponent(query)}`);
+      renderContacts(contacts);
+    }, 200);
+  });
+
+  loadContacts();
+</script>
+{% endblock %}

@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Send money — PocketPay{% endblock %}
+{% block content %}
+  <div class="page-header"><h1>Send money</h1></div>
+  <div id="banner"></div>
+
+  <div class="grid-2">
+    <div class="panel">
+      <h2>1. Find a receiver</h2>
+      <div class="field">
+        <label for="receiver-search">Search by name, user ID, wallet ID, or phone</label>
+        <input type="text" id="receiver-search" placeholder="e.g. Bob or WLT-XXXXXXXX" />
+      </div>
+      <div id="search-results"></div>
+    </div>
+
+    <div class="panel">
+      <h2>2. Transfer details</h2>
+      <form id="send-form">
+        <div class="field">
+          <label for="receiver-id">Receiver</label>
+          <input type="text" id="receiver-id" placeholder="Select a user from search results" readonly />
+        </div>
+        <div class="field">
+          <label for="amount">Amount (₹)</label>
+          <input type="number" id="amount" min="1" step="0.01" required />
+        </div>
+        <div class="field">
+          <label for="description">Description (optional)</label>
+          <input type="text" id="description" placeholder="What's this for?" />
+        </div>
+        <div class="field">
+          <label for="pin">Your PIN</label>
+          <input type="password" id="pin" inputmode="numeric" maxlength="4" required />
+        </div>
+        <button class="btn" type="submit">Send money</button>
+      </form>
+    </div>
+  </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const banner = document.getElementById("banner");
+  function showBanner(kind, message) {
+    banner.innerHTML = `<div class="banner ${kind}">${message}</div>`;
+  }
+
+  const searchInput = document.getElementById("receiver-search");
+  const resultsBox = document.getElementById("search-results");
+  const receiverField = document.getElementById("receiver-id");
+  let selectedWalletId = null;
+
+  let searchTimer;
+  searchInput.addEventListener("input", () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(runSearch, 250);
+  });
+
+  // Also allow searching contacts quickly
+  async function runSearch() {
+    const query = searchInput.value.trim();
+    resultsBox.innerHTML = "";
+    if (!query) return;
+    const users = await api.get(`/api/users/search?query=${encodeURIComponent(query)}`);
+    if (users.length === 0) {
+      resultsBox.innerHTML = `<p style="font-size:0.85rem;">No matching users found.</p>`;
+      return;
+    }
+    for (const u of users) {
+      const row = document.createElement("div");
+      row.className = "contact-row";
+      row.style.cursor = "pointer";
+      row.innerHTML = `
+        <div class="contact-info">
+          <div class="contact-avatar">${initials(u.name)}</div>
+          <div>
+            <div>${u.name}</div>
+            <div class="contact-meta">${u.wallet_id}</div>
+          </div>
+        </div>
+        <button type="button" class="btn secondary" style="padding:6px 12px;">Select</button>
+      `;
+      row.querySelector("button").addEventListener("click", () => {
+        selectedWalletId = u.wallet_id;
+        receiverField.value = `${u.name} (${u.wallet_id})`;
+      });
+      resultsBox.appendChild(row);
+    }
+  }
+
+  document.getElementById("send-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!selectedWalletId) {
+      showBanner("error", "Please select a receiver from the search results first.");
+      return;
+    }
+    const payload = {
+      receiver: selectedWalletId,
+      amount: document.getElementById("amount").value,
+      description: document.getElementById("description").value.trim(),
+      pin: document.getElementById("pin").value.trim(),
+    };
+    try {
+      const result = await api.post("/api/send", payload);
+      showBanner("success", `Sent ${formatMoney(result.transaction.amount)}. New balance: ${formatMoney(result.balance)}.`);
+      document.getElementById("sidebar-balance").textContent = formatMoney(result.balance);
+      e.target.reset();
+      selectedWalletId = null;
+      receiverField.value = "";
+      resultsBox.innerHTML = "";
+      searchInput.value = "";
+    } catch (err) {
+      showBanner("error", err.message);
+    }
+  });
+</script>
+{% endblock %}

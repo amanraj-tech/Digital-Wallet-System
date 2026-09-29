@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Create a wallet — PocketPay</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body>
+  <div class="auth-shell">
+    <div class="auth-card">
+      <div class="brand-lockup"><span class="brand-symbol" aria-hidden="true"><span></span></span><div class="brand-mark">Pocket<span>Pay</span></div></div>
+      <div class="brand-tag">Create your wallet in under a minute.</div>
+
+      <div id="banner"></div>
+
+      <form id="register-form">
+        <div class="field">
+          <label for="name">Full name</label>
+          <input type="text" id="name" required />
+        </div>
+        <div class="field">
+          <label for="email">Email</label>
+          <input type="email" id="email" required autocomplete="email" />
+        </div>
+        <div class="field">
+          <label for="phone">Phone number</label>
+          <input type="tel" id="phone" required />
+        </div>
+        <div class="field">
+          <label for="pin">Choose a 4-digit PIN</label>
+          <input type="password" id="pin" inputmode="numeric" maxlength="4" required />
+          <div class="hint">You'll use this PIN to confirm every transfer.</div>
+        </div>
+        <button class="btn" type="submit" style="width:100%">Create wallet</button>
+      </form>
+
+      <div class="auth-switch">
+        Already have a wallet? <a href="/">Log in</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/api.js') }}"></script>
+  <script>
+    const form = document.getElementById("register-form");
+    const banner = document.getElementById("banner");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      banner.innerHTML = "";
+      const payload = {
+        name: document.getElementById("name").value.trim(),
+        email: document.getElementById("email").value.trim(),
+        phone: document.getElementById("phone").value.trim(),
+        pin: document.getElementById("pin").value.trim(),
+      };
+      try {
+        await api.post("/api/register", payload);
+        window.location.href = "/dashboard";
+      } catch (err) {
+        banner.innerHTML = `<div class="banner error">${err.message}</div>`;
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Receipt — PocketPay{% endblock %}
+{% block content %}
+  <div class="page-header"><h1>Receipt</h1></div>
+
+  <div class="panel receipt" id="receipt-panel" style="display:none;">
+    <div class="receipt-head">
+      <div>Transaction receipt</div>
+      <div class="receipt-amount" id="r-amount"></div>
+      <span class="badge" id="r-status"></span>
+    </div>
+    <div class="receipt-row"><span class="k">Transaction ID</span><span class="v" id="r-id"></span></div>
+    <div class="receipt-row"><span class="k">Sender</span><span class="v" id="r-sender"></span></div>
+    <div class="receipt-row"><span class="k">Receiver</span><span class="v" id="r-receiver"></span></div>
+    <div class="receipt-row"><span class="k">Type</span><span class="v" id="r-type"></span></div>
+    <div class="receipt-row"><span class="k">Date</span><span class="v" id="r-date"></span></div>
+    <div class="receipt-row"><span class="k">Time</span><span class="v" id="r-time"></span></div>
+    <div class="receipt-row"><span class="k">Description</span><span class="v" id="r-desc"></span></div>
+    <div class="btn-row" style="margin-top:18px; justify-content:center;">
+      <a href="/history" class="btn secondary">Back to history</a>
+    </div>
+  </div>
+
+  <div id="receipt-empty" class="empty-state" style="display:none;">
+    <h3>Receipt not found</h3>
+    <p>This transaction may have been removed or the ID is incorrect.</p>
+  </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  async function loadReceipt() {
+    try {
+      const t = await api.get("/api/receipt/{{ transaction_id }}");
+      document.getElementById("receipt-panel").style.display = "block";
+      const isIncoming = t.type === "Money Added" || t.type === "Money Received";
+      document.getElementById("r-amount").textContent = `${isIncoming ? "+" : "-"}${formatMoney(t.amount)}`;
+      document.getElementById("r-amount").style.color = isIncoming ? "var(--emerald)" : "var(--sienna)";
+      document.getElementById("r-status").textContent = t.status;
+      document.getElementById("r-status").className = `badge ${badgeClass(t.status)}`;
+      document.getElementById("r-id").textContent = t.transaction_id;
+      document.getElementById("r-sender").textContent = t.sender_name;
+      document.getElementById("r-receiver").textContent = t.receiver_name;
+      document.getElementById("r-type").textContent = t.type;
+      document.getElementById("r-date").textContent = t.date;
+      document.getElementById("r-time").textContent = t.time;
+      document.getElementById("r-desc").textContent = t.description || "—";
+    } catch (err) {
+      document.getElementById("receipt-empty").style.display = "block";
+    }
+  }
+
+  loadReceipt();
+</script>
+{% endblock %}

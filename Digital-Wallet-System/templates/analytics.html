@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}Insights — PocketPay{% endblock %}
+{% block content %}
+  <div class="page-header"><div><div class="eyebrow">Your money, at a glance</div><h1>Insights</h1></div></div>
+  <p>Calculated live from your transaction history — nothing here is stored separately.</p>
+
+  <div class="grid-3" id="stats-grid" style="margin-bottom:20px;"></div>
+
+  <div class="panel spending-panel">
+    <div class="chart-heading">
+      <div><div class="section-kicker">Spending graph</div><h2>Where your money went</h2></div>
+      <div class="chart-controls"><div class="chart-total" id="spending-total">₹0.00</div><select id="month-select" aria-label="Select spending month"></select></div>
+    </div>
+    <div id="spending-chart" class="monthly-chart" aria-label="Monthly spending chart"></div>
+    <div id="spending-empty" class="empty-state" style="display:none;">No spending recorded yet.</div>
+  </div>
+
+  <div class="panel" id="largest-panel" style="display:none;">
+    <h2>Largest transaction</h2>
+    <div id="largest-content"></div>
+  </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  async function loadAnalytics() {
+    const a = await api.get("/api/analytics");
+    const transactions = await api.get("/api/transactions");
+    const grid = document.getElementById("stats-grid");
+    grid.innerHTML = `
+      <div class="stat positive">
+        <div class="stat-label">Total received</div>
+        <div class="stat-value">${formatMoney(a.total_received)}</div>
+      </div>
+      <div class="stat negative">
+        <div class="stat-label">Total sent</div>
+        <div class="stat-value">${formatMoney(a.total_sent)}</div>
+      </div>
+      <div class="stat positive">
+        <div class="stat-label">Total added</div>
+        <div class="stat-value">${formatMoney(a.total_added)}</div>
+      </div>
+      <div class="stat negative">
+        <div class="stat-label">Total withdrawn</div>
+        <div class="stat-value">${formatMoney(a.total_withdrawn)}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Number of transactions</div>
+        <div class="stat-value">${a.number_of_transactions}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Average transaction amount</div>
+        <div class="stat-value">${formatMoney(a.average_transaction_amount)}</div>
+      </div>
+    `;
+
+    const spendingTransactions = transactions.filter((t) =>
+      t.status === "Success" && (t.type === "Money Sent" || t.type === "Money Withdrawn")
+    );
+    const months = [...new Set(spendingTransactions.map((t) => t.date.slice(0, 7)))].sort().reverse();
+    const monthSelect = document.getElementById("month-select");
+    monthSelect.innerHTML = months.map((month) => {
+      const label = new Date(`${month}-01T00:00:00`).toLocaleDateString(undefined, { month: "short", year: "numeric" });
+      return `<option value="${month}">${label}</option>`;
+    }).join("");
+    const chart = document.getElementById("spending-chart");
+    const empty = document.getElementById("spending-empty");
+    function renderMonthlyChart(month) {
+      const monthTransactions = spendingTransactions.filter((t) => t.date.startsWith(month));
+      const [year, monthNumber] = month.split("-").map(Number);
+      const calendarDaysInMonth = new Date(year, monthNumber, 0).getDate();
+      const today = new Date();
+      const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+      const daysInMonth = month === currentMonth ? today.getDate() : calendarDaysInMonth;
+      const daily = Array(daysInMonth).fill(0);
+      monthTransactions.forEach((t) => { daily[Number(t.date.slice(8, 10)) - 1] += Number(t.amount); });
+      const cumulative = daily.reduce((values, amount) => {
+        values.push((values.at(-1) || 0) + amount);
+        return values;
+      }, []);
+      const totalSpending = cumulative.at(-1) || 0;
+      document.getElementById("spending-total").textContent = formatMoney(totalSpending);
+      if (!totalSpending) {
+        chart.innerHTML = "";
+        empty.style.display = "block";
+        return;
+      }
+      empty.style.display = "none";
+      const width = 900, height = 280, left = 42, right = 18, top = 18, bottom = 38;
+      const plotWidth = width - left - right, plotHeight = height - top - bottom;
+      const points = cumulative.map((value, index) => {
+        const x = left + (index / Math.max(daysInMonth - 1, 1)) * plotWidth;
+        const y = top + plotHeight - (value / totalSpending) * plotHeight;
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      });
+      const area = `${left},${top + plotHeight} ${points.join(" ")} ${left + plotWidth},${top + plotHeight}`;
+      const middleDay = Math.ceil(daysInMonth / 2);
+      chart.innerHTML = `<svg class="spending-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Cumulative spending for ${month}">
+        <defs><linearGradient id="spending-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#087f70" stop-opacity=".28"/><stop offset="1" stop-color="#087f70" stop-opacity=".02"/></linearGradient></defs>
+        <line class="chart-gridline" x1="${left}" y1="${top + plotHeight}" x2="${left + plotWidth}" y2="${top + plotHeight}" />
+        <polygon class="chart-area" points="${area}" />
+        <polyline class="chart-line" points="${points.join(" ")}" />
+        <circle class="chart-point" cx="${points.at(-1).split(",")[0]}" cy="${points.at(-1).split(",")[1]}" r="6"><title>${formatMoney(totalSpending)}</title></circle>
+        <text class="chart-label" x="${left}" y="${height - 10}">01</text>
+        <text class="chart-label" x="${left + ((middleDay - 1) / (daysInMonth - 1)) * plotWidth}" y="${height - 10}" text-anchor="middle">${String(middleDay).padStart(2, "0")}</text>
+        <text class="chart-label" x="${left + plotWidth}" y="${height - 10}" text-anchor="end">${String(daysInMonth).padStart(2, "0")}</text>
+      </svg>`;
+    }
+    if (months.length === 0) {
+      chart.innerHTML = "";
+      empty.style.display = "block";
+    } else {
+      renderMonthlyChart(months[0]);
+      monthSelect.addEventListener("change", (event) => renderMonthlyChart(event.target.value));
+    }
+
+    if (a.largest_transaction) {
+      document.getElementById("largest-panel").style.display = "block";
+      const t = a.largest_transaction;
+      document.getElementById("largest-content").innerHTML = `
+        <div class="receipt-row"><span class="k">Transaction ID</span><span class="v">${t.transaction_id}</span></div>
+        <div class="receipt-row"><span class="k">Type</span><span class="v">${t.type}</span></div>
+        <div class="receipt-row"><span class="k">Amount</span><span class="v">${formatMoney(t.amount)}</span></div>
+        <div class="receipt-row"><span class="k">Date</span><span class="v">${t.date} ${t.time}</span></div>
+      `;
+    }
+  }
+
+  loadAnalytics();
+</script>
+{% endblock %}

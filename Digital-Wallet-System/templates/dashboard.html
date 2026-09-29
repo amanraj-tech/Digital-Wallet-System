@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% block title %}Home — PocketPay{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div><div class="eyebrow">Your wallet</div><h1>Home</h1></div>
+    <a class="btn" href="/send">Send money <span aria-hidden="true">↗</span></a>
+  </div>
+
+  <div id="banner"></div>
+
+  <section class="dashboard-hero">
+    <div class="balance-card">
+      <div class="balance-card-top"><span>Available balance</span><span class="balance-dot"></span></div>
+      <div class="hero-balance" id="hero-balance">₹0.00</div>
+      <div class="balance-card-foot"><span>Wallet ID</span><strong id="hero-wallet">—</strong></div>
+    </div>
+    <div class="quick-actions">
+      <div class="section-kicker">Quick actions</div>
+      <div class="quick-grid">
+        <a href="#add-form"><span class="quick-icon">+</span><span>Add money</span></a>
+        <a href="/send"><span class="quick-icon">↗</span><span>Send money</span></a>
+        <a href="#wallet-id-card"><span class="quick-icon">↓</span><span>Receive</span></a>
+        <a href="/history"><span class="quick-icon">≡</span><span>Activity</span></a>
+      </div>
+    </div>
+  </section>
+
+  <section class="wallet-id-card panel" id="wallet-id-card">
+    <div><div class="section-kicker">Receive money</div><h2>Your PocketPay identifier</h2><p>Share this wallet ID with someone sending you money.</p></div>
+    <div class="wallet-id-value"><span id="receive-wallet-id">—</span><button class="btn secondary" id="copy-wallet" type="button">Copy ID</button></div>
+  </section>
+
+  <div class="grid-2">
+    <div class="panel">
+      <h2>Add money</h2>
+      <form id="add-form">
+        <div class="field">
+          <label for="add-amount">Amount (₹)</label>
+          <input type="number" id="add-amount" min="1" step="0.01" required />
+        </div>
+        <div class="field">
+          <label for="add-desc">Description (optional)</label>
+          <input type="text" id="add-desc" placeholder="e.g. Salary top-up" />
+        </div>
+        <button class="btn" type="submit">Add money</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>Withdraw money</h2>
+      <form id="withdraw-form">
+        <div class="field">
+          <label for="withdraw-amount">Amount (₹)</label>
+          <input type="number" id="withdraw-amount" min="1" step="0.01" required />
+        </div>
+        <div class="field">
+          <label for="withdraw-desc">Description (optional)</label>
+          <input type="text" id="withdraw-desc" placeholder="e.g. ATM withdrawal" />
+        </div>
+        <button class="btn secondary" type="submit">Withdraw</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="page-header" style="margin-bottom:12px;">
+      <h2 style="margin:0;">Recent activity</h2>
+      <button class="btn secondary" id="undo-btn">Undo last transaction</button>
+    </div>
+    <table class="ledger" id="recent-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Description</th>
+          <th>Type</th>
+          <th>Status</th>
+          <th style="text-align:right;">Amount</th>
+        </tr>
+      </thead>
+      <tbody id="recent-body"></tbody>
+    </table>
+    <div id="recent-empty" class="empty-state" style="display:none;">
+      <h3>No transactions yet</h3>
+      <p>Add money to your wallet to get started.</p>
+    </div>
+  </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const banner = document.getElementById("banner");
+
+  function showBanner(kind, message) {
+    banner.innerHTML = `<div class="banner ${kind}">${message}</div>`;
+    setTimeout(() => { banner.innerHTML = ""; }, 4000);
+  }
+
+  async function refreshSidebarBalance() {
+    const user = await api.get("/api/me");
+    document.getElementById("sidebar-balance").textContent = formatMoney(user.balance);
+    document.getElementById("hero-balance").textContent = formatMoney(user.balance);
+  }
+
+  async function loadWalletHeader() {
+    const user = await api.get("/api/me");
+    document.getElementById("hero-balance").textContent = formatMoney(user.balance);
+    document.getElementById("hero-wallet").textContent = user.wallet_id;
+    document.getElementById("receive-wallet-id").textContent = user.wallet_id;
+  }
+
+  document.getElementById("copy-wallet").addEventListener("click", async () => {
+    await navigator.clipboard.writeText(document.getElementById("receive-wallet-id").textContent);
+    showBanner("success", "Wallet ID copied to your clipboard.");
+  });
+
+  async function loadRecent() {
+    const items = await api.get("/api/transactions?limit=8");
+    const body = document.getElementById("recent-body");
+    const empty = document.getElementById("recent-empty");
+    body.innerHTML = "";
+    if (items.length === 0) {
+      empty.style.display = "block";
+      return;
+    }
+    empty.style.display = "none";
+    for (const t of items) {
+      const isIncoming = t.type === "Money Added" || t.type === "Money Received";
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${formatDateTime(t.timestamp)}</td>
+        <td>${t.description || t.type}</td>
+        <td>${t.type}</td>
+        <td><span class="badge ${badgeClass(t.status)}">${t.status}</span></td>
+        <td class="amount ${isIncoming ? 'in' : 'out'}">${isIncoming ? '+' : '-'}${formatMoney(t.amount)}</td>
+      `;
+      body.appendChild(row);
+    }
+  }
+
+  document.getElementById("add-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const amount = document.getElementById("add-amount").value;
+    const description = document.getElementById("add-desc").value.trim();
+    try {
+      await api.post("/api/wallet/add", { amount, description });
+      showBanner("success", "Money added to your wallet.");
+      e.target.reset();
+      await Promise.all([loadRecent(), refreshSidebarBalance()]);
+    } catch (err) {
+      showBanner("error", err.message);
+    }
+  });
+
+  document.getElementById("withdraw-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const amount = document.getElementById("withdraw-amount").value;
+    const description = document.getElementById("withdraw-desc").value.trim();
+    try {
+      await api.post("/api/wallet/withdraw", { amount, description });
+      showBanner("success", "Withdrawal successful.");
+      e.target.reset();
+      await Promise.all([loadRecent(), refreshSidebarBalance()]);
+    } catch (err) {
+      showBanner("error", err.message);
+    }
+  });
+
+  document.getElementById("undo-btn").addEventListener("click", async () => {
+    try {
+      const result = await api.post("/api/undo");
+      showBanner("success", `Reversed ${result.transaction.type.toLowerCase()} of ${formatMoney(result.transaction.amount)}.`);
+      await Promise.all([loadRecent(), refreshSidebarBalance()]);
+    } catch (err) {
+      showBanner("error", err.message);
+    }
+  });
+
+  loadRecent();
+  loadWalletHeader();
+</script>
+{% endblock %}

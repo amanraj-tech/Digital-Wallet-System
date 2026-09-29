@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Activity — PocketPay{% endblock %}
+{% block content %}
+  <div class="page-header"><h1>Transaction history</h1></div>
+
+  <div class="panel">
+    <div class="toolbar">
+      <select id="search-field">
+        <option value="">Search by…</option>
+        <option value="transaction_id">Transaction ID</option>
+        <option value="sender">Sender</option>
+        <option value="receiver">Receiver</option>
+        <option value="amount">Amount</option>
+        <option value="type">Type</option>
+        <option value="date">Date (YYYY-MM-DD)</option>
+      </select>
+      <input type="text" id="search-query" placeholder="Search value…" />
+      <button class="btn secondary" id="search-btn">Search</button>
+
+      <span style="width:1px; background:var(--line); align-self:stretch;"></span>
+
+      <select id="sort-by">
+        <option value="newest_first">Newest first</option>
+        <option value="oldest_first">Oldest first</option>
+        <option value="amount_high_low">Amount: high to low</option>
+        <option value="amount_low_high">Amount: low to high</option>
+        <option value="sender_receiver_name">Sender / receiver name</option>
+        <option value="transaction_type">Transaction type</option>
+      </select>
+      <select id="sort-algorithm">
+        <option value="merge">Merge sort</option>
+        <option value="quick">Quick sort</option>
+        <option value="insertion">Insertion sort</option>
+      </select>
+      <button class="btn secondary" id="sort-btn">Sort</button>
+
+      <button class="btn secondary" id="reset-btn">Reset</button>
+    </div>
+
+    <table class="ledger">
+      <thead>
+        <tr>
+          <th>Transaction ID</th>
+          <th>Date &amp; time</th>
+          <th>Sender</th>
+          <th>Receiver</th>
+          <th>Type</th>
+          <th>Status</th>
+          <th style="text-align:right;">Amount</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="txn-body"></tbody>
+    </table>
+    <div id="txn-empty" class="empty-state" style="display:none;">
+      <h3>No transactions match</h3>
+      <p>Try a different search or reset the filters.</p>
+    </div>
+  </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  function renderTransactions(items) {
+    const body = document.getElementById("txn-body");
+    const empty = document.getElementById("txn-empty");
+    body.innerHTML = "";
+    if (items.length === 0) {
+      empty.style.display = "block";
+      return;
+    }
+    empty.style.display = "none";
+    for (const t of items) {
+      const isIncoming = t.type === "Money Added" || t.type === "Money Received";
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td class="mono">${t.transaction_id}</td>
+        <td>${formatDateTime(t.timestamp)}</td>
+        <td>${t.sender_name}</td>
+        <td>${t.receiver_name}</td>
+        <td>${t.type}</td>
+        <td><span class="badge ${badgeClass(t.status)}">${t.status}</span></td>
+        <td class="amount ${isIncoming ? 'in' : 'out'}">${isIncoming ? '+' : '-'}${formatMoney(t.amount)}</td>
+        <td><a href="/receipt/${t.transaction_id}" class="btn secondary" style="padding:5px 10px; font-size:0.78rem;">Receipt</a></td>
+      `;
+      body.appendChild(row);
+    }
+  }
+
+  async function loadAll() {
+    const items = await api.get("/api/transactions");
+    renderTransactions(items);
+  }
+
+  document.getElementById("search-btn").addEventListener("click", async () => {
+    const field = document.getElementById("search-field").value;
+    const query = document.getElementById("search-query").value.trim();
+    if (!field || !query) { loadAll(); return; }
+    const items = await api.get(`/api/transactions/search?field=${field}&query=${encodeURIComponent(query)}`);
+    renderTransactions(items);
+  });
+
+  document.getElementById("sort-btn").addEventListener("click", async () => {
+    const sortBy = document.getElementById("sort-by").value;
+    const algorithm = document.getElementById("sort-algorithm").value;
+    const items = await api.get(`/api/transactions/sort?sort_by=${sortBy}&algorithm=${algorithm}`);
+    renderTransactions(items);
+  });
+
+  document.getElementById("reset-btn").addEventListener("click", () => {
+    document.getElementById("search-field").value = "";
+    document.getElementById("search-query").value = "";
+    loadAll();
+  });
+
+  loadAll();
+</script>
+{% endblock %}

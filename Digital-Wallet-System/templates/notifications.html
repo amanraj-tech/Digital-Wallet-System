@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Notifications — PocketPay{% endblock %}
+{% block content %}
+  <div class="page-header"><h1>Notifications</h1></div>
+
+  <div class="panel">
+    <div id="notif-list"></div>
+    <div id="notif-empty" class="empty-state" style="display:none;">
+      <h3>No notifications</h3>
+      <p>Activity on your wallet will show up here.</p>
+    </div>
+  </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  async function loadNotifications() {
+    const items = await api.get("/api/notifications");
+    const list = document.getElementById("notif-list");
+    const empty = document.getElementById("notif-empty");
+    list.innerHTML = "";
+    if (items.length === 0) {
+      empty.style.display = "block";
+      return;
+    }
+    empty.style.display = "none";
+    for (const n of items) {
+      const row = document.createElement("div");
+      row.className = `notification-item ${n.read ? "read" : ""}`;
+      row.innerHTML = `
+        <div class="dot"></div>
+        <div class="msg">
+          <div>${n.message}</div>
+          <div class="time">${formatDateTime(n.timestamp)}</div>
+        </div>
+      `;
+      if (!n.read) {
+        row.style.cursor = "pointer";
+        row.addEventListener("click", async () => {
+          await api.post("/api/notifications/read", { notification_id: n.notification_id });
+          loadNotifications();
+        });
+      }
+      list.appendChild(row);
+    }
+  }
+
+  loadNotifications();
+</script>
+{% endblock %}

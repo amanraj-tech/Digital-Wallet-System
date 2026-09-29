@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}PocketPay — Digital Wallet{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="/dashboard" aria-label="PocketPay home">
+        <span class="brand-symbol" aria-hidden="true"><span></span></span>
+        <span>Pocket<span>Pay</span></span>
+      </a>
+      <button class="menu-toggle" id="menu-toggle" aria-label="Toggle navigation" aria-expanded="false">☰</button>
+      <nav class="topnav" id="topnav">
+        <a href="/dashboard">Home</a>
+        <a href="/send">Send</a>
+        <a href="/history">Activity</a>
+        <a href="/contacts">Contacts</a>
+        <a href="/analytics">Insights</a>
+        <a href="/pending">Pending</a>
+      </nav>
+      <div class="topbar-actions">
+        <a class="icon-link" href="/notifications" aria-label="Notifications" title="Notifications">◌</a>
+        <div class="user-chip"><span class="user-avatar" id="user-avatar">—</span><span id="sidebar-name">—</span></div>
+        <button class="logout" id="logout-btn">Log out</button>
+      </div>
+      <span class="wallet-id" id="sidebar-wallet" hidden>WLT-••••••••</span>
+      <span id="sidebar-balance" hidden>₹0.00</span>
+    </header>
+    <main class="main">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  <script src="{{ url_for('static', filename='js/api.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/layout.js') }}"></script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>
